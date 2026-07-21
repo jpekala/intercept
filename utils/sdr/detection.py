@@ -234,7 +234,112 @@ def _get_soapy_env() -> dict:
                 env["SOAPY_SDR_ROOT"] = base
                 break
 
+    # Ensure UHD firmware images are discoverable for USRP devices.
+    # Debian/Ubuntu packages install images to /usr/share/uhd/<version>/images
+    # but UHD's compiled-in search path may not include that directory.
+    _ensure_uhd_images_dir(env)
+
     return env
+
+
+def _ensure_uhd_images_dir(env: dict) -> None:
+    """Set UHD_IMAGES_DIR if not already set and a standard install path exists."""
+    import os
+
+    if env.get("UHD_IMAGES_DIR"):
+        return
+
+    # Common locations for UHD firmware images across distributions
+    candidates = [
+        "/usr/share/uhd/images",  # Fedora, Arch
+    ]
+    # Debian/Ubuntu version-specific paths (e.g. /usr/share/uhd/4.8.0/images)
+    uhd_share = "/usr/share/uhd"
+    if os.path.isdir(uhd_share):
+        for entry in sorted(os.listdir(uhd_share), reverse=True):
+            versioned = os.path.join(uhd_share, entry, "images")
+            if os.path.isdir(versioned):
+                candidates.insert(0, versioned)
+                break
+
+    for path in candidates:
+        if os.path.isdir(path) and os.path.isfile(os.path.join(path, "usrp_b200_fw.hex")):
+            env["UHD_IMAGES_DIR"] = path
+            logger.debug("Auto-detected UHD_IMAGES_DIR=%s", path)
+            return
+
+
+def detect_uhd_devices() -> list[SDRDevice]:
+    """Detect Ettus USRP devices using native uhd_find_devices.
+
+    More reliable than SoapySDR for USRP hardware because it loads the
+    correct firmware images (B200/B200mini/B210 need usrp_b200_fw.hex
+    pushed over USB at init time).
+    """
+    devices: list[SDRDevice] = []
+
+    uhd_find = get_tool_path("uhd_find_devices")
+    if not uhd_find:
+        logger.debug("uhd_find_devices not found, skipping native USRP detection")
+        return devices
+
+    try:
+        env = _get_soapy_env()  # picks up UHD_IMAGES_DIR
+        result = subprocess.run(
+            [uhd_find, "--args="],
+            capture_output=True,
+            text=True,
+            timeout=10,
+            env=env,
+        )
+        output = result.stdout + result.stderr
+
+        from .usrp import USRPCommandBuilder
+
+        # Parse uhd_find_devices output blocks:
+        #   Device Address:
+        #       serial: 3262BF6
+        #       name: B200mini
+        #       product: B200mini
+        #       type: b200
+        current: dict[str, str] = {}
+        index = 0
+
+        for line in output.split("\n"):
+            line = line.strip()
+            if line.startswith("Device Address"):
+                if current.get("type"):
+                    devices.append(SDRDevice(
+                        sdr_type=SDRType.USRP,
+                        index=index,
+                        name=current.get("product", current.get("name", "USRP")),
+                        serial=current.get("serial", "N/A"),
+                        driver="uhd",
+                        capabilities=USRPCommandBuilder.CAPABILITIES,
+                    ))
+                    index += 1
+                current = {}
+            elif ":" in line and not line.startswith("-"):
+                key, _, value = line.partition(":")
+                current[key.strip()] = value.strip()
+
+        # Don't forget the last device block
+        if current.get("type"):
+            devices.append(SDRDevice(
+                sdr_type=SDRType.USRP,
+                index=index,
+                name=current.get("product", current.get("name", "USRP")),
+                serial=current.get("serial", "N/A"),
+                driver="uhd",
+                capabilities=USRPCommandBuilder.CAPABILITIES,
+            ))
+
+    except subprocess.TimeoutExpired:
+        logger.warning("uhd_find_devices timed out")
+    except Exception as e:
+        logger.debug(f"UHD detection error: {e}")
+
+    return devices
 
 
 def detect_soapy_devices(skip_types: set[SDRType] | None = None) -> list[SDRDevice]:
@@ -556,7 +661,13 @@ def detect_all_devices(force: bool = False) -> list[SDRDevice]:
     if hackrf_devices:
         skip_in_soapy.add(SDRType.HACKRF)
 
-    # SoapySDR devices (LimeSDR, Airspy, and fallback for HackRF/RTL-SDR if native failed)
+    # Native USRP detection via uhd_find_devices (primary method)
+    uhd_devices = detect_uhd_devices()
+    devices.extend(uhd_devices)
+    if uhd_devices:
+        skip_in_soapy.add(SDRType.USRP)
+
+    # SoapySDR devices (LimeSDR, Airspy, and fallback for HackRF/RTL-SDR/USRP if native failed)
     soapy_devices = detect_soapy_devices(skip_types=skip_in_soapy)
     devices.extend(soapy_devices)
 

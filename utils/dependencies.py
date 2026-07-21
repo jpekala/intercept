@@ -456,6 +456,48 @@ TOOL_DEPENDENCIES = {
             },
         },
     },
+    "usrp": {
+        "name": "Ettus USRP (B200mini / B200 / B210)",
+        "tools": {
+            "uhd_find_devices": {
+                "required": True,
+                "description": "UHD device discovery for Ettus USRP hardware",
+                "install": {
+                    "apt": "sudo apt install uhd-host",
+                    "brew": "brew install uhd",
+                    "manual": "https://files.ettus.com/manual/page_install.html",
+                },
+            },
+            "uhd_usrp_probe": {
+                "required": False,
+                "description": "Detailed USRP hardware probe and diagnostics",
+                "install": {
+                    "apt": "sudo apt install uhd-host",
+                    "brew": "brew install uhd",
+                    "manual": "https://files.ettus.com/manual/page_install.html",
+                },
+            },
+            "uhd_images_downloader": {
+                "required": False,
+                "description": "Downloads USRP firmware/FPGA images (required for B200-family)",
+                "install": {
+                    "apt": "sudo apt install uhd-host && sudo uhd_images_downloader --types b2xx",
+                    "brew": "brew install uhd && uhd_images_downloader --types b2xx",
+                    "manual": "https://files.ettus.com/manual/page_images.html",
+                },
+            },
+            "SoapySDRUtil": {
+                "required": True,
+                "description": "SoapySDR utility (SoapyUHD bridge for rx_fm/rx_sdr/readsb)",
+                "soapy_factory": "uhd",
+                "install": {
+                    "apt": "sudo apt install soapysdr-module-uhd",
+                    "brew": "brew install soapyuhd",
+                    "manual": "https://github.com/pothosware/SoapyUHD",
+                },
+            },
+        },
+    },
     "radiosonde": {
         "name": "Radiosonde Tracking",
         "tools": {

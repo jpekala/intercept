@@ -5,8 +5,20 @@ Uses SoapySDR (via the UHD driver / SoapyUHD bridge) for all signal
 processing tasks.  The same rx_fm / rx_sdr / rtl_433 / AIS-catcher
 toolchain used by HackRF applies here because they all speak SoapySDR.
 
-Tested target: USRP N200 / B200 / B210 (UHD driver, SoapyUHD bridge).
-Requires: uhd, SoapySDR, SoapyUHD installed on the host or in Docker.
+Tested targets:
+  - Ettus USRP B200mini  (AD9364, 1 TX/RX, 70 MHz-6 GHz, 56 MHz BW, USB 3.0)
+  - Ettus USRP B200       (AD9364, 1 TX/RX, 70 MHz-6 GHz, 56 MHz BW, USB 3.0)
+  - Ettus USRP B210       (AD9361, 2 TX/RX, 70 MHz-6 GHz, 56 MHz BW, USB 3.0)
+  - Ettus USRP N200/N210  (external daughterboard, GigE)
+
+Requires:
+  - uhd (libuhd-dev, uhd-host) — UHD driver and uhd_find_devices
+  - UHD firmware images    — run 'uhd_images_downloader --types b2xx'
+  - SoapySDR + SoapyUHD    — bridge for rx_fm / rx_sdr / readsb / rtl_433
+
+If uhd_find_devices fails with 'Could not find path for image', set
+UHD_IMAGES_DIR to the directory containing usrp_b200_fw.hex (typically
+/usr/share/uhd/<version>/images on Debian/Ubuntu).
 """
 
 from __future__ import annotations
@@ -19,13 +31,16 @@ from .base import CommandBuilder, SDRCapabilities, SDRDevice, SDRType
 class USRPCommandBuilder(CommandBuilder):
     """USRP command builder using SoapySDR / UHD."""
 
+    # B200-family specs (AD9364): 70 MHz-6 GHz, 76 dB gain, 61.44 MS/s max.
+    # The freq_min is set to 1 MHz to accommodate N200/N210 with wideband
+    # daughterboards; B200/B200mini actual minimum is 70 MHz.
     CAPABILITIES = SDRCapabilities(
         sdr_type=SDRType.USRP,
         freq_min_mhz=1.0,
         freq_max_mhz=6000.0,
         gain_min=0.0,
-        gain_max=76.0,  # typical UHD normalised gain range
-        sample_rates=[1000000, 2000000, 4000000, 8000000, 16000000, 25000000],
+        gain_max=76.0,
+        sample_rates=[1000000, 2000000, 4000000, 8000000, 16000000, 25000000, 40000000, 61440000],
         supports_bias_t=False,
         supports_ppm=False,
         tx_capable=True,
