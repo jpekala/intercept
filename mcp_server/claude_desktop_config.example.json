@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "intercept": {
+      "command": "python",
+      "args": ["mcp_server/intercept_mcp.py"],
+      "cwd": "/path/to/intercept",
+      "env": {
+        "INTERCEPT_URL": "http://localhost:5000"
+      }
+    }
+  }
+}
