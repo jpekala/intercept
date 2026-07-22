@@ -13,7 +13,7 @@ import logging
 from flask import jsonify, request
 
 from routes.tscm import _emit_event, tscm_bp
-from utils.tscm.rf_watch import start_watch, stop_watch, watch_status, get_watch_daemon
+from utils.tscm.rf_watch import get_watch_daemon, start_watch, stop_watch, watch_status
 from utils.tscm.spectral_baseline import (
     SpectralDeltaEngine,
     SpectralStore,

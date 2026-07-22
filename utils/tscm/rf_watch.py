@@ -12,7 +12,7 @@ import logging
 import threading
 import time
 from collections import deque
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any, Callable
 
 logger = logging.getLogger("intercept.tscm.rf_watch")
@@ -106,7 +106,11 @@ class WaterfallBuffer:
 
 class AnomalyEngine:
     """Detects anomalies in streaming spectrum data by comparing against
-    a running short-term average and the spectral baseline."""
+    a running short-term average and the spectral baseline.
+
+    Baseline lookup uses numpy arrays with np.searchsorted for O(log n)
+    per-frame comparison instead of dict lookups per bin.
+    """
 
     SPIKE_THRESHOLD = 10.0      # dB above short-term avg
     NEW_SIGNAL_THRESHOLD = 8.0  # dB above noise floor for previously empty bin
@@ -116,16 +120,41 @@ class AnomalyEngine:
     def __init__(self):
         self._short_term: dict[str, deque] = {}  # freq_key -> deque of (timestamp, power)
         self._active_bursts: dict[str, dict] = {}  # freq_key -> {start, peak_power, band}
-        self._baseline_bins: dict[str, dict] | None = None
+        self._baseline_freqs: Any = None   # sorted numpy array of baseline frequencies
+        self._baseline_means: Any = None   # numpy array of baseline power means
         self._lock = threading.Lock()
         self._anomaly_callbacks: list[Callable] = []
 
     def set_baseline(self, bins: dict[str, dict]) -> None:
+        """Load baseline from dict (backward compatible)."""
         with self._lock:
-            self._baseline_bins = bins
+            if not _HAS_DEPS or not bins:
+                self._baseline_freqs = None
+                self._baseline_means = None
+                return
+            sorted_keys = sorted(bins.keys(), key=float)
+            self._baseline_freqs = np.array([float(k) for k in sorted_keys], dtype=np.float64)
+            self._baseline_means = np.array([bins[k]["power_mean"] for k in sorted_keys], dtype=np.float64)
+
+    def set_baseline_arrays(self, freqs: Any, means: Any) -> None:
+        """Load baseline directly from numpy arrays (fast path)."""
+        with self._lock:
+            self._baseline_freqs = freqs
+            self._baseline_means = means
 
     def on_anomaly(self, callback: Callable[[WatchAnomaly], None]) -> None:
         self._anomaly_callbacks.append(callback)
+
+    def _lookup_baseline(self, freq_mhz: float) -> float | None:
+        """O(log n) baseline lookup using searchsorted."""
+        if self._baseline_freqs is None:
+            return None
+        idx = np.searchsorted(self._baseline_freqs, freq_mhz)
+        if idx < len(self._baseline_freqs) and abs(self._baseline_freqs[idx] - freq_mhz) < 1e-6:
+            return float(self._baseline_means[idx])
+        if idx > 0 and abs(self._baseline_freqs[idx - 1] - freq_mhz) < 1e-6:
+            return float(self._baseline_means[idx - 1])
+        return None
 
     def process_frame(self, frame: SpectrumFrame) -> list[WatchAnomaly]:
         if not _HAS_DEPS:
@@ -135,6 +164,8 @@ class AnomalyEngine:
         now = frame.timestamp
 
         with self._lock:
+            has_baseline = self._baseline_freqs is not None
+
             for i in range(len(frame.freqs)):
                 freq_mhz = float(frame.freqs[i])
                 power = float(frame.power_db[i])
@@ -150,10 +181,7 @@ class AnomalyEngine:
                 else:
                     avg = power
 
-                # Check against spectral baseline
-                bl_power = None
-                if self._baseline_bins and freq_key in self._baseline_bins:
-                    bl_power = self._baseline_bins[freq_key].get("power_mean")
+                bl_power = self._lookup_baseline(freq_mhz) if has_baseline else None
 
                 # Spike detection: sudden jump above short-term average
                 if power - avg > self.SPIKE_THRESHOLD:
@@ -173,11 +201,7 @@ class AnomalyEngine:
 
                 # New signal detection (not in baseline, above noise)
                 above_noise = power - frame.noise_floor
-                if (
-                    self._baseline_bins is not None
-                    and freq_key not in self._baseline_bins
-                    and above_noise > self.NEW_SIGNAL_THRESHOLD
-                ):
+                if has_baseline and bl_power is None and above_noise > self.NEW_SIGNAL_THRESHOLD:
                     a = WatchAnomaly(
                         timestamp=now,
                         frequency_mhz=freq_mhz,
@@ -430,16 +454,16 @@ def start_watch(
 
         _daemon = RFWatchDaemon(device_args, bands, gain)
 
-        # Load spectral baseline if available
+        # Load spectral baseline if available (prefer numpy arrays for speed)
         try:
             from utils.tscm.spectral_baseline import SpectralStore
             store = SpectralStore()
             bl_id = store.get_active_baseline_id()
             if bl_id:
-                bins = store.get_bins(bl_id)
-                if bins:
-                    _daemon.anomaly_engine.set_baseline(bins)
-                    logger.info(f"Watch daemon loaded spectral baseline {bl_id} ({len(bins)} bins)")
+                arrays = store.get_arrays(bl_id)
+                if arrays is not None:
+                    _daemon.anomaly_engine.set_baseline_arrays(arrays.freqs, arrays.mean)
+                    logger.info(f"Watch daemon loaded spectral baseline {bl_id} ({arrays.size} bins, numpy arrays)")
         except Exception as e:
             logger.debug(f"Could not load spectral baseline: {e}")
 
