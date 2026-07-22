@@ -116,12 +116,15 @@ class AnomalyEngine:
     NEW_SIGNAL_THRESHOLD = 8.0  # dB above noise floor for previously empty bin
     BURST_MIN_DURATION = 0.5    # seconds
     BURST_MAX_DURATION = 30.0   # seconds
+    BASELINE_TOLERANCE_MHZ = 0.1   # nearest-bin match window (sweep and FFT grids differ)
+    NEW_SIGNAL_COOLDOWN_S = 60.0   # suppress duplicate new_signal alerts per bin
 
     def __init__(self):
         self._short_term: dict[str, deque] = {}  # freq_key -> deque of (timestamp, power)
         self._active_bursts: dict[str, dict] = {}  # freq_key -> {start, peak_power, band}
         self._baseline_freqs: Any = None   # sorted numpy array of baseline frequencies
         self._baseline_means: Any = None   # numpy array of baseline power means
+        self._new_signal_last_fired: dict[str, float] = {}  # coarse freq_key -> timestamp
         self._lock = threading.Lock()
         self._anomaly_callbacks: list[Callable] = []
 
@@ -146,15 +149,24 @@ class AnomalyEngine:
         self._anomaly_callbacks.append(callback)
 
     def _lookup_baseline(self, freq_mhz: float) -> float | None:
-        """O(log n) baseline lookup using searchsorted."""
+        """O(log n) nearest-bin baseline lookup using searchsorted.
+
+        Matches the closest baseline bin within BASELINE_TOLERANCE_MHZ —
+        sweep-derived baselines and live FFT frames sit on different
+        frequency grids, so exact matching would never hit.
+        """
         if self._baseline_freqs is None:
             return None
         idx = np.searchsorted(self._baseline_freqs, freq_mhz)
-        if idx < len(self._baseline_freqs) and abs(self._baseline_freqs[idx] - freq_mhz) < 1e-6:
-            return float(self._baseline_means[idx])
-        if idx > 0 and abs(self._baseline_freqs[idx - 1] - freq_mhz) < 1e-6:
-            return float(self._baseline_means[idx - 1])
-        return None
+        best = None
+        best_dist = self.BASELINE_TOLERANCE_MHZ
+        for i in (idx - 1, idx):
+            if 0 <= i < len(self._baseline_freqs):
+                dist = abs(float(self._baseline_freqs[i]) - freq_mhz)
+                if dist <= best_dist:
+                    best_dist = dist
+                    best = float(self._baseline_means[i])
+        return best
 
     def process_frame(self, frame: SpectrumFrame) -> list[WatchAnomaly]:
         if not _HAS_DEPS:
@@ -164,6 +176,13 @@ class AnomalyEngine:
         now = frame.timestamp
 
         with self._lock:
+            # Partial SDR reads yield varying FFT lengths and thus new
+            # frequency grids; cap tracking state so it can't grow unbounded.
+            if len(self._short_term) > 200_000:
+                self._short_term.clear()
+            if len(self._new_signal_last_fired) > 50_000:
+                self._new_signal_last_fired.clear()
+
             has_baseline = self._baseline_freqs is not None
 
             for i in range(len(frame.freqs)):
@@ -199,21 +218,27 @@ class AnomalyEngine:
                     )
                     anomalies.append(a)
 
-                # New signal detection (not in baseline, above noise)
+                # New signal detection (not in baseline, above noise).
+                # Cooldown keyed on ~10 kHz granularity so a persistent
+                # transmitter alerts once a minute, not once per frame.
                 above_noise = power - frame.noise_floor
                 if has_baseline and bl_power is None and above_noise > self.NEW_SIGNAL_THRESHOLD:
-                    a = WatchAnomaly(
-                        timestamp=now,
-                        frequency_mhz=freq_mhz,
-                        anomaly_type="new_signal",
-                        power_db=power,
-                        baseline_power=None,
-                        delta_db=above_noise,
-                        duration_s=0,
-                        band=frame.band,
-                        severity=_watch_severity(above_noise),
-                    )
-                    anomalies.append(a)
+                    coarse_key = f"{freq_mhz:.2f}"
+                    last = self._new_signal_last_fired.get(coarse_key, 0.0)
+                    if now - last >= self.NEW_SIGNAL_COOLDOWN_S:
+                        self._new_signal_last_fired[coarse_key] = now
+                        a = WatchAnomaly(
+                            timestamp=now,
+                            frequency_mhz=freq_mhz,
+                            anomaly_type="new_signal",
+                            power_db=power,
+                            baseline_power=None,
+                            delta_db=above_noise,
+                            duration_s=0,
+                            band=frame.band,
+                            severity=_watch_severity(above_noise),
+                        )
+                        anomalies.append(a)
 
                 # Burst tracking (signal that appears and disappears)
                 is_active = above_noise > 6.0
