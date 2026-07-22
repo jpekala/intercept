@@ -141,7 +141,8 @@ class SpectralStore:
     def _save_arrays(self, baseline_id: int, arrays: BaselineArrays) -> None:
         """Atomically save baseline arrays to .npz file."""
         target = self._npz_path(baseline_id)
-        fd, tmp = tempfile.mkstemp(dir=_SPECTRAL_DIR, suffix=".npz.tmp")
+        # Suffix must end in .npz so np.savez_compressed doesn't append one
+        fd, tmp = tempfile.mkstemp(dir=_SPECTRAL_DIR, suffix=".tmp.npz")
         os.close(fd)
         try:
             np.savez_compressed(
@@ -155,17 +156,12 @@ class SpectralStore:
                 count=arrays.count,
                 band_ids=arrays.band_ids,
             )
-            if not tmp.endswith(".npz"):
-                actual = tmp + ".npz"
-                if os.path.exists(actual):
-                    tmp = actual
             os.replace(tmp, target)
         except Exception:
-            for p in (tmp, tmp + ".npz"):
-                try:
-                    os.unlink(p)
-                except OSError:
-                    pass
+            try:
+                os.unlink(tmp)
+            except OSError:
+                pass
             raise
 
     def _load_arrays(self, baseline_id: int) -> BaselineArrays | None:
