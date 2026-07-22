@@ -1766,6 +1766,32 @@ def _run_sweep(
                 completed=True,
             )
 
+            # Auto-ingest RF signals into active spectral baseline
+            if all_rf:
+                try:
+                    from utils.tscm.spectral_baseline import (
+                        SpectralDeltaEngine,
+                        SpectralStore,
+                        build_snapshot_from_rf_signals,
+                    )
+                    spectral_store = SpectralStore()
+                    active_spectral_id = spectral_store.get_active_baseline_id()
+                    if active_spectral_id:
+                        snapshot = build_snapshot_from_rf_signals(all_rf, _current_sweep_id)
+                        spectral_store.ingest_snapshot(active_spectral_id, snapshot)
+                        logger.info(f"Spectral baseline {active_spectral_id}: ingested {len(snapshot.bins)} bins from sweep {_current_sweep_id}")
+
+                        spectral_delta = SpectralDeltaEngine(spectral_store)
+                        spectral_anomalies = spectral_delta.compare(snapshot, active_spectral_id)
+                        if spectral_anomalies:
+                            _emit_event("spectral_anomalies", {
+                                "count": len(spectral_anomalies),
+                                "anomalies": [a.to_dict() for a in spectral_anomalies[:20]],
+                            })
+                            logger.info(f"Spectral analysis: {len(spectral_anomalies)} anomalies detected")
+                except Exception as e:
+                    logger.debug(f"Spectral baseline ingestion skipped: {e}")
+
             # Emit correlation findings
             _emit_event(
                 "correlation_findings",
@@ -1893,4 +1919,5 @@ from routes.tscm import (
     meeting,  # noqa: E402, F401
     schedules,  # noqa: E402, F401
     sweep,  # noqa: E402, F401
+    watch,  # noqa: E402, F401
 )

@@ -335,7 +335,10 @@ class DeviceSession:
             self.fingerprint_hashes.add(fp)
 
         if obs.rssi is not None:
-            self.rssi_samples.append(obs.rssi)
+            try:
+                self.rssi_samples.append(int(float(obs.rssi)))
+            except (ValueError, TypeError):
+                pass
 
         # Calculate interval from previous observation
         if len(self.observations) > 1:

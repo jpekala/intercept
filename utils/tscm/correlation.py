@@ -201,6 +201,10 @@ class DeviceProfile:
 
     def add_rssi_sample(self, rssi: int) -> None:
         """Add an RSSI sample with timestamp."""
+        try:
+            rssi = int(float(rssi))
+        except (ValueError, TypeError):
+            return
         self.rssi_samples.append((datetime.now(), rssi))
         # Keep last 100 samples
         if len(self.rssi_samples) > 100:

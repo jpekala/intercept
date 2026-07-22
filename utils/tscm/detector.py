@@ -22,6 +22,16 @@ from utils.tscm.signal_classification import (
 
 logger = logging.getLogger("intercept.tscm.detector")
 
+
+def _safe_num(val, default=-100):
+    """Coerce a value to int, handling string RSSI/power values."""
+    if val is None:
+        return default
+    try:
+        return int(float(val))
+    except (ValueError, TypeError):
+        return default
+
 # Classification levels for TSCM devices
 CLASSIFICATION_LEVELS = {
     "informational": {
@@ -158,7 +168,7 @@ class ThreatDetector:
         """
         mac = device.get("bssid", device.get("mac", "")).upper()
         ssid = device.get("essid", device.get("ssid", ""))
-        signal = device.get("power", device.get("signal", -100))
+        signal = _safe_num(device.get("power", device.get("signal")))
 
         reasons = []
         classification = "informational"
@@ -223,7 +233,7 @@ class ThreatDetector:
         """
         mac = device.get("mac", device.get("address", "")).upper()
         name = device.get("name", "")
-        rssi = device.get("rssi", device.get("signal", -100))
+        rssi = _safe_num(device.get("rssi", device.get("signal")))
         device_type = device.get("type", "")
         manufacturer_data = device.get("manufacturer_data")
 
@@ -342,7 +352,7 @@ class ThreatDetector:
             Dict with 'classification', 'reasons', and metadata
         """
         frequency = signal.get("frequency", 0)
-        power = signal.get("power", signal.get("level", -100))
+        power = _safe_num(signal.get("power", signal.get("level")))
         signal.get("band", "")
 
         reasons = []
@@ -419,7 +429,7 @@ class ThreatDetector:
         mac = device.get("bssid", device.get("mac", "")).upper()
         ssid = device.get("essid", device.get("ssid", ""))
         vendor = device.get("vendor", "")
-        signal = device.get("power", device.get("signal", -100))
+        signal = _safe_num(device.get("power", device.get("signal")))
 
         threats = []
 
@@ -491,7 +501,7 @@ class ThreatDetector:
         """
         mac = device.get("mac", device.get("address", "")).upper()
         name = device.get("name", "")
-        rssi = device.get("rssi", device.get("signal", -100))
+        rssi = _safe_num(device.get("rssi", device.get("signal")))
         manufacturer = device.get("manufacturer", "")
         device_type = device.get("type", "")
         manufacturer_data = device.get("manufacturer_data")
@@ -583,7 +593,7 @@ class ThreatDetector:
             Threat dict if threat detected, None otherwise
         """
         frequency = signal.get("frequency", 0)
-        level = signal.get("level", signal.get("power", -100))
+        level = _safe_num(signal.get("level", signal.get("power")))
         modulation = signal.get("modulation", "")
 
         if not frequency:
