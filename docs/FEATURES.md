@@ -25,7 +25,7 @@ Quick reference for all supported modes. Click any mode for full usage instructi
 | [BT Locate](USAGE.md#bt-locate-sar-device-location) | GPS-tagged signal trail and proximity alerts | Bluetooth + GPS |
 | [WiFi Locate](USAGE.md#wifi-locate-mode) | Locate APs by BSSID with signal meter and distance | WiFi adapter |
 | [GPS](USAGE.md#gps-mode) | Real-time position, speed, altitude, satellite map | GPS receiver, gpsd |
-| [TSCM](USAGE.md#tscm-counter-surveillance) | RF baseline comparison and threat detection | RTL-SDR + BT + WiFi |
+| [TSCM](USAGE.md#tscm-counter-surveillance) | Three-tier RF monitoring: sweeps, spectral baselines, continuous watch | RTL-SDR / SoapySDR + BT + WiFi |
 | [Drone Intelligence](USAGE.md#drone-intelligence) | UAV detection via Remote ID, RF, and HackRF | RTL-SDR / HackRF |
 | [Spy Stations](USAGE.md#spy-stations) | Number stations and diplomatic HF network database | None (database lookup) |
 | [Meshtastic](USAGE.md#meshtastic) | LoRa mesh network integration | Meshtastic device |

@@ -549,7 +549,7 @@ RADIOSONDE_DEFAULT_GAIN = _get_env_float("RADIOSONDE_GAIN", 40.0)
 RADIOSONDE_UDP_PORT = _get_env_int("RADIOSONDE_UDP_PORT", 55673)
 
 # Update checking
-GITHUB_REPO = _get_env("GITHUB_REPO", "smittix/intercept")
+GITHUB_REPO = _get_env("GITHUB_REPO", "jpekala/intercept")
 UPDATE_CHECK_ENABLED = _get_env_bool("UPDATE_CHECK_ENABLED", True)
 UPDATE_CHECK_INTERVAL_HOURS = _get_env_int("UPDATE_CHECK_INTERVAL_HOURS", 6)
 

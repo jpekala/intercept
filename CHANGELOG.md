@@ -2,6 +2,21 @@
 
 All notable changes to iNTERCEPT will be documented in this file.
 
+## [2.33.0] - 2026-07-21
+
+### Added
+- **Three-tier TSCM RF monitoring** — Layered RF monitoring system for counter-surveillance:
+  1. **Scheduled sweeps** — Cron-based automated sweeps every N minutes with baseline comparison via `rtl_power`, `hackrf_sweep`, or SoapySDR
+  2. **Spectral baseline** — Per-frequency-bin power statistics (`SpectralStore` + `SpectralDeltaEngine`) tracking mean, min, max, and standard deviation across sweeps. Detects new transmitters, power increases, and disappeared signals with severity and confidence scoring
+  3. **Continuous watch** — Real-time RF streaming daemon (`RFWatchDaemon`) using SoapySDR with rolling FFT, waterfall buffer, and anomaly detection (spikes, bursts, new signals)
+- **SoapySDR RF scanner** — `soapy_sweep.py` provides power spectrum scanning for USRP, LimeSDR, Airspy, and BladeRF devices in TSCM sweeps, using numpy FFT with stepped captures
+- **TSCM watch and spectral API** — New endpoints under `/tscm/watch/*` (start, stop, status, waterfall) and `/tscm/spectral/*` (baseline CRUD, ingest, compare)
+
+### Fixed
+- **TSCM string-to-int coercion** — RSSI and power values arriving as strings crashed comparisons in `detector.py`, `correlation.py`, and `device_identity.py`. Added `_safe_num()` helper to coerce values safely via `int(float(val))`
+
+---
+
 ## [2.32.0] - 2026-07-07
 
 ### Added

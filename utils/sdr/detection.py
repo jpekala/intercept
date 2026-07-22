@@ -207,7 +207,7 @@ def _get_soapy_env() -> dict:
     detection issues where modules like SoapyHackRF are installed but
     not found by SoapySDRUtil.
 
-    See: https://github.com/smittix/intercept/issues/77
+    See: https://github.com/jpekala/intercept/issues/77
     """
     import os
     import platform

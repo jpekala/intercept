@@ -439,12 +439,44 @@ Digital Selective Calling monitoring runs alongside AIS:
 - **Needs Review (3-5)** - Unusual devices requiring assessment
 - **High Interest (6+)** - Multiple indicators warrant investigation
 
+### Spectral Baselines
+
+Spectral baselines provide per-frequency-bin power tracking for fine-grained RF change detection.
+
+1. **Create Baseline** - `POST /tscm/spectral/baselines` with a name and optional description
+2. **Ingest Data** - Feed RF sweep data into the baseline via `POST /tscm/spectral/baselines/<id>/ingest` with an array of `rf_signals` (each with `frequency` and `power`)
+3. **Activate** - Set as the active baseline via `POST /tscm/spectral/baselines/<id>/activate`
+4. **Compare** - Compare a new set of RF signals against the active baseline via `POST /tscm/spectral/compare`
+
+The spectral engine tracks per-bin mean, min, max, and standard deviation using Welford's online algorithm. Anomaly types:
+- **New transmitter** - Power detected in a frequency bin that was previously at noise floor
+- **Power increase** - Significant power delta above the baseline mean (>6 dB)
+- **Disappeared** - A previously active transmitter has gone silent
+
+### Continuous RF Watch
+
+The RF watch daemon provides real-time spectrum monitoring using SoapySDR devices (USRP, LimeSDR, Airspy, BladeRF).
+
+1. **Start Watch** - `POST /tscm/watch/start` with `device_args` (SoapySDR device string) and optional `bands` and `gain`
+2. **Monitor Status** - `GET /tscm/watch/status` returns daemon state, frame count, anomaly count, and waterfall summary
+3. **View Waterfall** - `GET /tscm/watch/waterfall?seconds=300` returns recent spectrum frames
+4. **Stop Watch** - `POST /tscm/watch/stop`
+
+The daemon sweeps configured frequency bands continuously, running FFT on each capture and feeding results through the anomaly engine. Detected anomaly types:
+- **Spike** - Sudden power jump above the short-term rolling average (>10 dB)
+- **New signal** - Transmission in a frequency bin not present in the spectral baseline (>8 dB above noise)
+- **Burst** - Signal that appears and disappears within 0.5-30 seconds
+
+If a spectral baseline is active, the watch daemon loads it on startup and uses it for new-signal detection.
+
 ### Tips
 
 - Record a baseline in a known clean environment before conducting sweeps
 - Use the meeting window feature to flag new RF signatures during sensitive periods
 - Full functionality requires WiFi adapter, Bluetooth adapter, and SDR hardware
 - Threat detection uses a database of 47K+ known tracker fingerprints
+- For continuous monitoring, use a SoapySDR-capable device (USRP, LimeSDR, Airspy, BladeRF) with the watch daemon
+- Build spectral baselines over multiple sweeps for higher confidence anomaly detection
 
 ## Drone Intelligence
 

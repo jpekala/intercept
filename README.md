@@ -49,7 +49,7 @@ Support the developer of this open-source project
 - **BT Locate** - SAR Bluetooth device location with GPS-tagged signal trail mapping and proximity alerts
 - **WiFi Locate** - Locate WiFi access points by BSSID with real-time signal meter, distance estimation, and proximity audio
 - **GPS** - Real-time GPS position tracking with live map, speed, altitude, and satellite info
-- **TSCM** - Counter-surveillance with RF baseline comparison and threat detection
+- **TSCM** - Counter-surveillance with three-tier RF monitoring: scheduled sweeps, spectral baseline tracking, and continuous watch mode with real-time anomaly detection
 - **Meshtastic** - LoRa mesh network integration
 - **Space Weather** - Real-time solar and geomagnetic data from NOAA SWPC, NASA SDO, and HamQSL (no SDR required)
 - **Spy Stations** - Number stations and diplomatic HF network database
@@ -64,7 +64,7 @@ Support the developer of this open-source project
 ### Quick Start
 
 ```bash
-git clone https://github.com/smittix/intercept.git
+git clone https://github.com/jpekala/intercept.git
 cd intercept
 ./setup.sh          # Interactive menu (first run launches setup wizard)
 sudo ./start.sh
@@ -117,7 +117,7 @@ Multiple profiles can be combined (e.g. enter `1 3` for Core + Weather).
 ### Docker
 
 ```bash
-git clone https://github.com/smittix/intercept.git
+git clone https://github.com/jpekala/intercept.git
 cd intercept
 docker compose --profile basic up -d --build
 ```
@@ -201,12 +201,14 @@ Default credentials: **admin / admin** — change these in `config.py` (`ADMIN_U
 
 | Hardware | Purpose | Price |
 |----------|---------|-------|
-| **RTL-SDR** | Required for all SDR features | ~$25-35 |
+| **RTL-SDR** | Required for most SDR features | ~$25-35 |
+| **USRP B200mini** | Wideband TSCM scanning, continuous watch (70 MHz-6 GHz, 56 MHz BW) | ~$900 |
+| **HackRF One** | Sub-GHz analysis, RF capture (1 MHz-6 GHz) | ~$300 |
 | **WiFi adapter** | Must support promiscuous (monitor) mode | ~$20-40 |
 | **Bluetooth adapter** | Device scanning (usually built-in) | - |
-| **GPS** | Any Linux supported GPS Unit | ~10 |
+| **GPS** | Any Linux supported GPS Unit | ~$10 |
 
-Most features work with a basic RTL-SDR dongle (RTL2832U + R820T2).
+Most features work with a basic RTL-SDR dongle (RTL2832U + R820T2). For TSCM continuous monitoring, a USRP B200mini or similar wideband SDR is recommended.
 
 | :exclamation:  Not using an RTL-SDR Device?   |
 |-----------------------------------------------
@@ -256,7 +258,8 @@ Apache 2.0 License - see [LICENSE](LICENSE)
 
 ## Author
 
-Created by **smittix** - [GitHub](https://github.com/smittix)
+Forked and extended by **jpekala** - [GitHub](https://github.com/jpekala/intercept)
+Original project by **smittix** - [GitHub](https://github.com/smittix)
 
 ## Acknowledgments
 
@@ -270,6 +273,8 @@ Created by **smittix** - [GitHub](https://github.com/smittix)
 [rtlamr](https://github.com/bemasher/rtlamr) |
 [dumpvdl2](https://github.com/szpajder/dumpvdl2) |
 [aircrack-ng](https://www.aircrack-ng.org/) |
+[SoapySDR](https://github.com/pothosware/SoapySDR) |
+[UHD](https://github.com/EttusResearch/uhd) |
 [Leaflet.js](https://leafletjs.com/) |
 [SatDump](https://github.com/SatDump/SatDump) |
 [Celestrak](https://celestrak.org/) |

@@ -99,12 +99,24 @@ Each signal type has its own Flask blueprint:
 - `aprs.py` - Amateur packet radio via direwolf
 - `rtlamr.py` - Utility meter reading
 - `meshtastic_routes.py` - Meshtastic LoRa mesh networking
+- `tscm/` - Counter-surveillance package (sub-modules below)
+
+#### TSCM Route Sub-modules (`routes/tscm/`)
+- `__init__.py` - Core sweep engine (`_run_sweep`), cron parser/scheduler daemon, RF/WiFi/BT scanning, threat handler, SSE event emitter, spectral baseline auto-ingestion hook
+- `sweep.py` - `/sweep/start`, `/sweep/stop`, `/sweep/status`, `/sweep/stream` (SSE), `/devices`, `/presets`, `/capabilities`, `/feed/*`
+- `baseline.py` - `/baseline/record`, `/baseline/stop`, `/baselines`, `/baseline/<id>/activate`, `/baseline/compare`, `/baseline/diff/<bl>/<sw>`
+- `schedules.py` - `/schedules` CRUD, `/schedules/<id>/run` (trigger now)
+- `watch.py` - `/watch/start`, `/watch/stop`, `/watch/status`, `/watch/waterfall` (continuous RF daemon), `/spectral/baselines` CRUD, `/spectral/compare`
+- `analysis.py` - `/threats`, `/findings`, `/correlations`, `/report`, `/report/csv`, device identity clusters, timelines, known-device registry
+- `cases.py` - Case management (CRUD, link sweeps/threats, notes)
+- `meeting.py` - Meeting window management (start/stop, tracked meetings, summaries)
 
 ### Core Utilities (utils/)
 
 **SDR Abstraction Layer** (`utils/sdr/`):
-- `SDRFactory` with factory pattern for multiple SDR types (RTL-SDR, LimeSDR, HackRF, Airspy, SDRPlay)
+- `SDRFactory` with factory pattern for multiple SDR types (RTL-SDR, LimeSDR, HackRF, Airspy, SDRPlay, USRP, BladeRF, HydraSDR)
 - Each type has a `CommandBuilder` for generating CLI commands
+- USRP/B200mini: native UHD detection, SoapySDR Python bindings for RF scanning (no CLI tools required)
 
 **Bluetooth Module** (`utils/bluetooth/`):
 - Multi-backend: DBus/BlueZ primary, fallback for systems without BlueZ
@@ -113,10 +125,14 @@ Each signal type has its own Flask blueprint:
 - `heuristics.py` - Behavioral analysis for device classification
 
 **TSCM (Counter-Surveillance)** (`utils/tscm/`):
-- `baseline.py` - Snapshot "normal" RF environment
-- `detector.py` - Compare current scan to baseline, flag anomalies
+- `baseline.py` - Snapshot "normal" RF/WiFi/BT environment (device-level)
+- `spectral_baseline.py` - Per-frequency-bin power tracking over time (Welford's online variance), new transmitter detection, power delta engine
+- `rf_watch.py` - Continuous RF streaming daemon (SoapySDR), waterfall buffer, real-time anomaly engine (spike/burst/new signal detection)
+- `soapy_sweep.py` - SoapySDR-based RF power scanner for USRP/LimeSDR/Airspy/BladeRF (numpy FFT)
+- `detector.py` - Threat detection and signal classification against baseline
 - `device_identity.py` - Track devices despite MAC randomization
 - `correlation.py` - Cross-reference Bluetooth and WiFi observations
+- `signal_classification.py` - RF signal type identification
 
 **WiFi Utilities** (`utils/wifi/`):
 - Platform-agnostic scanner with parsers for airodump-ng, nmcli, iw, iwlist, airport (macOS)
@@ -156,6 +172,8 @@ Each signal type has its own Flask blueprint:
 | SatDump | Weather satellites | CLI live mode, NOAA APT + Meteor LRPT |
 | AIS-catcher | AIS vessel tracking | JSON output parsing |
 | direwolf | APRS | TNC modem for packet radio |
+| SoapySDR | SDR abstraction (USRP, LimeSDR, Airspy, BladeRF) | Python bindings for RF sweep and continuous watch |
+| UHD | USRP device control (B200mini) | Via SoapySDR UHD driver |
 
 ### Frontend Structure
 - **UI direction (decided 2026-06-12)**: map-heavy modes get dedicated dashboard
@@ -179,6 +197,18 @@ Each signal type has its own Flask blueprint:
 - `docker-compose.yml` - Two profiles: `basic` (standalone) and `history` (with Postgres for ADS-B)
 - `build-multiarch.sh` - Multi-arch build script for amd64 + arm64 (RPi5)
 - Data persisted via `./data:/app/data` volume mount
+
+### TSCM Three-Tier RF Monitoring
+
+**Tier 1 — Scheduled Sweeps**: Cron-based automated sweeps via `tscm_schedules` table. 5-field cron parser in `__init__.py`, daemon thread polls every 30s. Each sweep runs the full WiFi/BT/RF scanning pipeline and compares against a device-level baseline. Threats trigger SSE events, webhooks (via `ALERT_WEBHOOK_URL`), and MQTT export.
+
+**Tier 2 — Spectral Baseline** (`utils/tscm/spectral_baseline.py`): Per-frequency-bin power tracking using Welford's online variance. `SpectralStore` persists data in SQLite (`tscm_spectral_baselines`, `tscm_spectral_bins`, `tscm_spectral_snapshots` tables). `SpectralDeltaEngine` compares current spectrum to baseline, detecting new transmitters (10dB+ above noise), power increases (6dB+ delta), and disappeared signals. Auto-ingests RF data at sweep completion via hook in `_run_sweep()`.
+
+**Tier 3 — Continuous Watch** (`utils/tscm/rf_watch.py`): `RFWatchDaemon` streams from SoapySDR devices with rolling FFT. `WaterfallBuffer` holds 3600-frame rolling history. `AnomalyEngine` detects spikes (10dB+ above short-term avg), new signals (8dB+ above noise not in baseline), and transient bursts (0.5-30s). Loads spectral baseline at startup for comparison. Singleton daemon controlled via `/tscm/watch/*` endpoints.
+
+**TSCM Database Tables** (all in `utils/database.py`): `tscm_baselines`, `tscm_sweeps`, `tscm_threats`, `tscm_schedules`, `tscm_device_timelines`, `tscm_known_devices`, `tscm_cases`, `tscm_case_sweeps`, `tscm_case_threats`, `tscm_case_notes`, `tscm_meeting_windows`, `tscm_sweep_capabilities`, plus spectral tables (`tscm_spectral_baselines`, `tscm_spectral_bins`, `tscm_spectral_snapshots`).
+
+**Alert Pipeline**: `utils/event_pipeline.py` routes SSE events through `utils/alerts.py` (rule matching, webhook delivery) and `utils/mqtt.py` (topic-based publish). Config: `ALERT_WEBHOOK_URL`, `ALERT_WEBHOOK_SECRET`, `INTERCEPT_MQTT_BROKER`.
 
 ### Configuration
 - `config.py` - Environment variable support with `INTERCEPT_` prefix (e.g., `INTERCEPT_PORT`, `INTERCEPT_WEATHER_SAT_GAIN`)

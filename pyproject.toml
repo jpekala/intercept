@@ -41,9 +41,9 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/smittix/intercept"
-Repository = "https://github.com/smittix/intercept"
-Issues = "https://github.com/smittix/intercept/issues"
+Homepage = "https://github.com/jpekala/intercept"
+Repository = "https://github.com/jpekala/intercept"
+Issues = "https://github.com/jpekala/intercept/issues"
 
 [project.optional-dependencies]
 dev = [

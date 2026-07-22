@@ -35,7 +35,7 @@ DEFAULT_CHECK_INTERVAL = 6 * 60 * 60
 
 def _get_github_repo() -> str:
     """Get the configured GitHub repository."""
-    return getattr(config, "GITHUB_REPO", "smittix/intercept")
+    return getattr(config, "GITHUB_REPO", "jpekala/intercept")
 
 
 def _get_check_interval() -> int:

@@ -7,6 +7,9 @@
 | **RTL-SDR** | 24 - 1766 MHz | ~$25-35 | Recommended for beginners |
 | **LimeSDR** | 0.1 - 3800 MHz | ~$300 | Wide range, requires SoapySDR |
 | **HackRF** | 1 - 6000 MHz | ~$300 | Ultra-wide range, requires SoapySDR |
+| **Airspy** | 24 - 1800 MHz | ~$200 | High dynamic range, requires SoapySDR |
+| **USRP B200mini** | 70 - 6000 MHz | ~$900 | Ettus Research, requires SoapyUHD |
+| **BladeRF** | 47 - 6000 MHz | ~$480 | bladeRF 2.0 micro, requires SoapyBladeRF |
 
 INTERCEPT automatically detects connected devices.
 
@@ -323,6 +326,23 @@ sudo apt install rtl-sdr
 
 # macOS
 brew install librtlsdr
+```
+
+### SoapySDR Devices (Continuous RF Watch)
+- **USRP, LimeSDR, Airspy, BladeRF** via SoapySDR for continuous spectrum monitoring
+- Required for the TSCM continuous watch daemon and spectral baseline features
+- `SoapySDR` library and the appropriate device module (SoapyUHD, SoapyLMS7, SoapyAirspy, SoapyBladeRF)
+- `numpy` for FFT-based power spectrum computation
+
+```bash
+# Debian/Ubuntu
+sudo apt install -y soapysdr-tools python3-numpy
+
+# Device-specific modules (install as needed)
+sudo apt install -y soapysdr-module-uhd       # USRP
+sudo apt install -y soapysdr-module-lms7       # LimeSDR
+sudo apt install -y soapysdr-module-airspy     # Airspy
+sudo apt install -y soapysdr-module-bladerf    # BladeRF
 ```
 
 ### WiFi Scanning
