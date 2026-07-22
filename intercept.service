@@ -1,0 +1,31 @@
+[Unit]
+Description=INTERCEPT Signal Intelligence Platform
+Documentation=https://github.com/jpekala/intercept
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+Type=exec
+User=root
+Group=root
+WorkingDirectory=/home/user01/intercept
+EnvironmentFile=-/home/user01/intercept/.env
+Environment=UHD_IMAGES_DIR=/usr/share/uhd/4.8.0/images
+ExecStart=/home/user01/intercept/start.sh
+Restart=on-failure
+RestartSec=5
+TimeoutStartSec=30
+TimeoutStopSec=10
+
+# Hardening
+ProtectSystem=false
+PrivateTmp=true
+NoNewPrivileges=false
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=intercept
+
+[Install]
+WantedBy=multi-user.target

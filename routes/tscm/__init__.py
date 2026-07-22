@@ -872,7 +872,12 @@ def _scan_rf_signals(
     sweep_ranges: list[dict] | None = None,
 ) -> list[dict]:
     """
-    Scan for RF signals using SDR (rtl_power or hackrf_sweep).
+    Scan for RF signals using SDR.
+
+    Supports three backends:
+    - rtl_power (RTL-SDR)
+    - hackrf_sweep (HackRF)
+    - SoapySDR Python bindings (USRP, LimeSDR, Airspy, BladeRF, etc.)
 
     Scans common surveillance frequency bands:
     - 88-108 MHz: FM broadcast (potential FM bugs)
@@ -911,6 +916,7 @@ def _scan_rf_signals(
 
     sdr_type = None
     sweep_tool_path = None
+    soapy_device = None
 
     try:
         from utils.sdr import SDRFactory
@@ -919,9 +925,14 @@ def _scan_rf_signals(
         devices = SDRFactory.detect_devices()
         rtlsdr_available = any(d.sdr_type == SDRType.RTL_SDR for d in devices)
         hackrf_available = any(d.sdr_type == SDRType.HACKRF for d in devices)
+
+        # Check for SoapySDR-native devices (USRP, LimeSDR, Airspy, BladeRF)
+        SOAPY_TYPES = {SDRType.USRP, SDRType.LIME_SDR, SDRType.AIRSPY, SDRType.BLADE_RF}
+        soapy_devices = [d for d in devices if d.sdr_type in SOAPY_TYPES]
     except ImportError:
         rtlsdr_available = False
         hackrf_available = False
+        soapy_devices = []
 
     # Pick the best available SDR + sweep tool combo
     if rtlsdr_available and rtl_power_path:
@@ -932,6 +943,20 @@ def _scan_rf_signals(
         sdr_type = "hackrf"
         sweep_tool_path = hackrf_sweep_path
         logger.info(f"Using HackRF with hackrf_sweep at: {hackrf_sweep_path}")
+    elif soapy_devices:
+        # Use SoapySDR Python-based scanner for USRP/LimeSDR/Airspy/BladeRF
+        from utils.tscm.soapy_sweep import is_available as soapy_sweep_available
+
+        if soapy_sweep_available():
+            sdr_type = "soapy"
+            dev = soapy_devices[0]
+            if dev.serial and dev.serial not in ("N/A", "Unknown"):
+                soapy_device = f"driver={dev.driver},serial={dev.serial}"
+            else:
+                soapy_device = f"driver={dev.driver}"
+            logger.info(f"Using SoapySDR scanner with {dev.name} ({soapy_device})")
+        else:
+            logger.warning(f"SoapySDR device {soapy_devices[0].name} found but numpy/SoapySDR Python bindings unavailable")
     elif rtl_power_path:
         # Tool exists but no device detected — try anyway (detection may have failed)
         sdr_type = "rtlsdr"
@@ -942,13 +967,13 @@ def _scan_rf_signals(
         sweep_tool_path = hackrf_sweep_path
         logger.info("No SDR detected but hackrf_sweep found, attempting HackRF scan")
 
-    if not sweep_tool_path:
-        logger.warning("No supported sweep tool found (rtl_power or hackrf_sweep)")
+    if not sdr_type:
+        logger.warning("No supported sweep tool or SoapySDR device found")
         _emit_event(
             "rf_status",
             {
                 "status": "error",
-                "message": "No SDR sweep tool installed. Install rtl-sdr (rtl_power) or HackRF (hackrf_sweep) for RF scanning.",
+                "message": "No SDR sweep tool installed. Install rtl-sdr (rtl_power), HackRF (hackrf_sweep), or use a SoapySDR device (USRP, LimeSDR, Airspy) with python3-soapysdr + numpy.",
             },
         )
         return signals
@@ -982,6 +1007,28 @@ def _scan_rf_signals(
             (2400000000, 2500000000, 500000, "2.4 GHz ISM"),  # WiFi/BT/Video
         ]
 
+    # SoapySDR path: use Python-based scanner instead of subprocess
+    if sdr_type == "soapy" and soapy_device:
+        from utils.tscm.soapy_sweep import scan_bands as soapy_scan_bands
+
+        _emit_event("rf_status", {"status": "scanning", "message": f"RF scan via SoapySDR ({soapy_device})"})
+        signals = soapy_scan_bands(soapy_device, scan_bands, gain=40.0, stop_check=stop_check)
+
+        # Deduplicate nearby frequencies (within 100kHz)
+        if signals:
+            signals.sort(key=lambda x: x["frequency"])
+            deduped = [signals[0]]
+            for sig in signals[1:]:
+                if sig["frequency"] - deduped[-1]["frequency"] > 0.1:
+                    deduped.append(sig)
+                elif sig["power"] > deduped[-1]["power"]:
+                    deduped[-1] = sig
+            signals = deduped
+
+        logger.info(f"SoapySDR RF scan found {len(signals)} signals")
+        return signals
+
+    # Subprocess path: rtl_power or hackrf_sweep
     # Create temp file for output
     with tempfile.NamedTemporaryFile(mode="w", suffix=".csv", delete=False) as tmp:
         tmp_path = tmp.name
