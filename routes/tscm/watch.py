@@ -13,6 +13,7 @@ import logging
 from flask import jsonify, request
 
 from routes.tscm import _emit_event, tscm_bp
+from utils.event_pipeline import process_event
 from utils.tscm.rf_watch import get_watch_daemon, start_watch, stop_watch, watch_status
 from utils.tscm.spectral_baseline import (
     SpectralDeltaEngine,
@@ -21,6 +22,37 @@ from utils.tscm.spectral_baseline import (
 )
 
 logger = logging.getLogger("intercept.tscm.watch")
+
+# Severities that reach the alert/MQTT pipeline. Low-severity spikes are
+# routine RF churn and would only add noise, so they are dropped here.
+_ALERT_SEVERITIES = {"medium", "high", "critical"}
+
+
+def _handle_watch_anomaly(anomaly) -> None:
+    """Fan a watch-daemon anomaly out to the SSE stream and, for medium+
+    severity, the alert/recording/MQTT pipeline.
+
+    Runs in the watch daemon thread. Every branch is guarded so a downstream
+    failure can never crash the streaming loop.
+    """
+    try:
+        data = anomaly.to_dict()
+    except Exception:
+        return
+
+    if data.get("severity") not in _ALERT_SEVERITIES:
+        return
+
+    try:
+        _emit_event("watch_anomaly", data)
+    except Exception as e:
+        logger.debug(f"watch_anomaly SSE emit failed: {e}")
+
+    try:
+        # mode 'tscm' -> MQTT topic <prefix>/tscm/watch_anomaly, plus alert rules
+        process_event("tscm", data, "watch_anomaly")
+    except Exception as e:
+        logger.debug(f"watch_anomaly pipeline failed: {e}")
 
 
 # =============================================================================
@@ -46,7 +78,7 @@ def start_rf_watch():
                 b.get("name", "custom"),
             ))
 
-    result = start_watch(device_args, band_tuples, gain)
+    result = start_watch(device_args, band_tuples, gain, on_anomaly=_handle_watch_anomaly)
 
     if result.get("status") == "started":
         _emit_event("watch_started", {

@@ -208,7 +208,7 @@ Each signal type has its own Flask blueprint:
 
 **TSCM Database Tables** (all in `utils/database.py`): `tscm_baselines`, `tscm_sweeps`, `tscm_threats`, `tscm_schedules`, `tscm_device_timelines`, `tscm_known_devices`, `tscm_cases`, `tscm_case_sweeps`, `tscm_case_threats`, `tscm_case_notes`, `tscm_meeting_windows`, `tscm_sweep_capabilities`, plus spectral tables (`tscm_spectral_baselines`, `tscm_spectral_bins`, `tscm_spectral_snapshots`).
 
-**Alert Pipeline**: `utils/event_pipeline.py` routes SSE events through `utils/alerts.py` (rule matching, webhook delivery) and `utils/mqtt.py` (topic-based publish). Config: `ALERT_WEBHOOK_URL`, `ALERT_WEBHOOK_SECRET`, `INTERCEPT_MQTT_BROKER`.
+**Alert Pipeline**: `utils/event_pipeline.py` routes SSE events through `utils/alerts.py` (rule matching, webhook delivery) and `utils/mqtt.py` (topic-based publish). Config: `ALERT_WEBHOOK_URL`, `ALERT_WEBHOOK_SECRET`, `INTERCEPT_MQTT_BROKER`. Tier 3 watch anomalies (medium+ severity) reach this pipeline via `_handle_watch_anomaly` in `routes/tscm/watch.py`, registered as the daemon's `on_anomaly` callback; they publish to `intercept/tscm/watch_anomaly`. `docker-compose.mqtt.yml` runs a standalone EMQX broker + web dashboard for viewing this traffic.
 
 ### Configuration
 - `config.py` - Environment variable support with `INTERCEPT_` prefix (e.g., `INTERCEPT_PORT`, `INTERCEPT_WEATHER_SAT_GAIN`)

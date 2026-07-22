@@ -136,6 +136,36 @@ class TestNewSignalCooldown:
         assert len([a for a in result if a.anomaly_type == "new_signal"]) == 0
 
 
+class TestAnomalyCallback:
+    def test_callback_invoked_on_detection(self):
+        eng = AnomalyEngine()
+        eng.set_baseline_arrays(numpy.array([500.0]), numpy.array([-50.0]))
+        received = []
+        eng.on_anomaly(received.append)
+        eng.process_frame(_spectrum([(105.0, -40.0)]))
+        assert len(received) >= 1
+        assert received[0].anomaly_type in ("new_signal", "spike", "burst")
+
+    def test_callback_not_invoked_on_quiet_frame(self):
+        eng = AnomalyEngine()
+        received = []
+        eng.on_anomaly(received.append)
+        eng.process_frame(_spectrum([]))  # flat noise, no peaks
+        assert received == []
+
+    def test_failing_callback_does_not_break_processing(self):
+        eng = AnomalyEngine()
+        eng.set_baseline_arrays(numpy.array([500.0]), numpy.array([-50.0]))
+
+        def boom(_a):
+            raise RuntimeError("callback blew up")
+
+        eng.on_anomaly(boom)
+        # Must not raise despite the callback throwing
+        result = eng.process_frame(_spectrum([(105.0, -40.0)]))
+        assert isinstance(result, list)
+
+
 class TestSpikeDetection:
     def test_spike_over_short_term_avg(self):
         eng = AnomalyEngine()

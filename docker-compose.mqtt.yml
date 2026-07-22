@@ -1,0 +1,51 @@
+# INTERCEPT — standalone MQTT broker + web dashboard
+#
+# INTERCEPT publishes decoded events (including TSCM watch anomalies) to MQTT
+# when INTERCEPT_MQTT_BROKER is set. This compose file runs an EMQX broker with
+# an integrated web dashboard so you can watch that traffic live — no separate
+# client needed.
+#
+# Usage:
+#   docker compose -f docker-compose.mqtt.yml up -d
+#
+# Then point INTERCEPT at the broker (in .env or the service environment):
+#   INTERCEPT_MQTT_BROKER=<host running this compose>
+#   INTERCEPT_MQTT_PORT=1883
+#
+# Web dashboard:  http://<host>:18083   (login: admin / <MQTT_DASHBOARD_PASSWORD>)
+#   Live message feed:  Dashboard -> Diagnose -> WebSocket Client
+#   (connect to ws://<host>:8083/mqtt, subscribe to  intercept/#)
+#
+# Change the dashboard password before exposing this beyond localhost:
+#   MQTT_DASHBOARD_PASSWORD=your-password docker compose -f docker-compose.mqtt.yml up -d
+
+name: intercept-mqtt
+
+services:
+  emqx:
+    image: emqx/emqx:5.8
+    container_name: intercept-mqtt
+    restart: unless-stopped
+    environment:
+      - TZ=${TZ:-UTC}
+      # Erlang distribution cookie — change for multi-node; fine as-is for one node.
+      - EMQX_NODE__COOKIE=${MQTT_NODE_COOKIE:-intercept-emqx-cookie}
+      # Bootstrap dashboard admin. Password must be >= 8 chars.
+      - EMQX_DASHBOARD__DEFAULT_USERNAME=admin
+      - EMQX_DASHBOARD__DEFAULT_PASSWORD=${MQTT_DASHBOARD_PASSWORD:-intercept-admin}
+      # No authenticator is configured, so MQTT clients connect anonymously —
+      # intended for a trusted LAN. Add an authenticator in the dashboard
+      # (Access Control -> Authentication) before exposing 1883 publicly.
+    ports:
+      - "1883:1883"     # MQTT (INTERCEPT publishes here)
+      - "8083:8083"     # MQTT over WebSocket (browser clients / dashboard tool)
+      - "18083:18083"   # Web dashboard
+    volumes:
+      - ./data/emqx/data:/opt/emqx/data
+      - ./data/emqx/log:/opt/emqx/log
+    healthcheck:
+      test: ["CMD", "/opt/emqx/bin/emqx", "ctl", "status"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 20s

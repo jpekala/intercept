@@ -491,8 +491,14 @@ def start_watch(
     device_args: str,
     bands: list[tuple[int, int, str]] | None = None,
     gain: float = 40.0,
+    on_anomaly: Callable[[WatchAnomaly], None] | None = None,
 ) -> dict:
-    """Start the RF watch daemon. Returns status dict."""
+    """Start the RF watch daemon. Returns status dict.
+
+    on_anomaly, if given, is registered before the streaming thread starts so
+    no early detections are missed. The route layer uses this to fan anomalies
+    out to the SSE stream and the alert/MQTT pipeline.
+    """
     global _daemon
 
     if bands is None:
@@ -507,6 +513,9 @@ def start_watch(
             return {"status": "already_running", **_daemon.get_status()}
 
         _daemon = RFWatchDaemon(device_args, bands, gain)
+
+        if on_anomaly is not None:
+            _daemon.anomaly_engine.on_anomaly(on_anomaly)
 
         # Load spectral baseline if available (prefer numpy arrays for speed)
         try:
