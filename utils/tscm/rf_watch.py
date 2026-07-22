@@ -118,6 +118,8 @@ class AnomalyEngine:
     BURST_MAX_DURATION = 30.0   # seconds
     BASELINE_TOLERANCE_MHZ = 0.1   # nearest-bin match window (sweep and FFT grids differ)
     NEW_SIGNAL_COOLDOWN_S = 60.0   # suppress duplicate new_signal alerts per bin
+    PEAK_PROMINENCE = 10.0      # dB above noise floor a bin must clear to be a peak
+    PEAK_QUANTIZE_MHZ = 0.05    # round peak freqs to a stable grid across frames
 
     def __init__(self):
         self._short_term: dict[str, deque] = {}  # freq_key -> deque of (timestamp, power)
@@ -168,6 +170,26 @@ class AnomalyEngine:
                     best = float(self._baseline_means[i])
         return best
 
+    def _find_peaks(self, freqs: Any, power_db: Any, noise_floor: float) -> Any:
+        """Return indices of prominent spectral peaks.
+
+        A raw FFT frame has hundreds of leakage/scalloping bins above the
+        median noise floor; treating each as a signal floods detection.
+        A peak is a local maximum that clears noise_floor + PEAK_PROMINENCE,
+        which reduces a frame to the handful of genuine emitters present.
+        """
+        n = len(power_db)
+        if n < 3:
+            return np.array([], dtype=np.intp)
+        threshold = noise_floor + self.PEAK_PROMINENCE
+        above = power_db > threshold
+        # Local maxima: strictly greater than left, >= right (handles plateaus)
+        left = power_db[1:-1] > power_db[:-2]
+        right = power_db[1:-1] >= power_db[2:]
+        local_max = np.zeros(n, dtype=bool)
+        local_max[1:-1] = left & right
+        return np.nonzero(above & local_max)[0]
+
     def process_frame(self, frame: SpectrumFrame) -> list[WatchAnomaly]:
         if not _HAS_DEPS:
             return []
@@ -175,20 +197,24 @@ class AnomalyEngine:
         anomalies: list[WatchAnomaly] = []
         now = frame.timestamp
 
+        peak_idx = self._find_peaks(frame.freqs, frame.power_db, frame.noise_floor)
+
         with self._lock:
-            # Partial SDR reads yield varying FFT lengths and thus new
-            # frequency grids; cap tracking state so it can't grow unbounded.
-            if len(self._short_term) > 200_000:
+            # Peaks quantize to a stable grid, but a long-lived daemon can
+            # still accumulate keys; cap tracking state defensively.
+            if len(self._short_term) > 100_000:
                 self._short_term.clear()
             if len(self._new_signal_last_fired) > 50_000:
                 self._new_signal_last_fired.clear()
 
             has_baseline = self._baseline_freqs is not None
+            active_this_frame: set[str] = set()
 
-            for i in range(len(frame.freqs)):
-                freq_mhz = float(frame.freqs[i])
+            for i in peak_idx:
+                freq_mhz = round(float(frame.freqs[i]) / self.PEAK_QUANTIZE_MHZ) * self.PEAK_QUANTIZE_MHZ
                 power = float(frame.power_db[i])
                 freq_key = f"{freq_mhz:.4f}"
+                active_this_frame.add(freq_key)
 
                 if freq_key not in self._short_term:
                     self._short_term[freq_key] = deque(maxlen=60)
@@ -240,32 +266,32 @@ class AnomalyEngine:
                         )
                         anomalies.append(a)
 
-                # Burst tracking (signal that appears and disappears)
-                is_active = above_noise > 6.0
-                if is_active:
-                    if freq_key not in self._active_bursts:
-                        self._active_bursts[freq_key] = {
-                            "start": now, "peak_power": power, "band": frame.band,
-                        }
-                    else:
-                        if power > self._active_bursts[freq_key]["peak_power"]:
-                            self._active_bursts[freq_key]["peak_power"] = power
-                elif freq_key in self._active_bursts:
-                    burst = self._active_bursts.pop(freq_key)
-                    duration = now - burst["start"]
-                    if self.BURST_MIN_DURATION <= duration <= self.BURST_MAX_DURATION:
-                        a = WatchAnomaly(
-                            timestamp=now,
-                            frequency_mhz=freq_mhz,
-                            anomaly_type="burst",
-                            power_db=burst["peak_power"],
-                            baseline_power=bl_power,
-                            delta_db=burst["peak_power"] - frame.noise_floor,
-                            duration_s=duration,
-                            band=frame.band,
-                            severity="medium" if duration < 5 else "high",
-                        )
-                        anomalies.append(a)
+                # Burst tracking: peak is present this frame, start/extend it
+                if freq_key not in self._active_bursts:
+                    self._active_bursts[freq_key] = {
+                        "start": now, "peak_power": power, "band": frame.band,
+                    }
+                elif power > self._active_bursts[freq_key]["peak_power"]:
+                    self._active_bursts[freq_key]["peak_power"] = power
+
+            # Close out bursts whose peak disappeared this frame
+            for freq_key in list(self._active_bursts.keys()):
+                if freq_key in active_this_frame:
+                    continue
+                burst = self._active_bursts.pop(freq_key)
+                duration = now - burst["start"]
+                if self.BURST_MIN_DURATION <= duration <= self.BURST_MAX_DURATION:
+                    anomalies.append(WatchAnomaly(
+                        timestamp=now,
+                        frequency_mhz=float(freq_key),
+                        anomaly_type="burst",
+                        power_db=burst["peak_power"],
+                        baseline_power=self._lookup_baseline(float(freq_key)) if has_baseline else None,
+                        delta_db=burst["peak_power"] - frame.noise_floor,
+                        duration_s=duration,
+                        band=burst["band"],
+                        severity="medium" if duration < 5 else "high",
+                    ))
 
         for a in anomalies:
             for cb in self._anomaly_callbacks:
