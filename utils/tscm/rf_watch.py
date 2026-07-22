@@ -358,10 +358,13 @@ class RFWatchDaemon:
         self._status = {"state": "stopped"}
 
     def get_status(self) -> dict:
+        bl_freqs = self.anomaly_engine._baseline_freqs
+        baseline = {"loaded": bl_freqs is not None, "bins": int(len(bl_freqs)) if bl_freqs is not None else 0}
         return {
             **self._status,
             "stats": self._stats.copy(),
             "waterfall": self.waterfall.get_summary(),
+            "baseline": baseline,
         }
 
     def _run(self) -> None:
@@ -515,8 +518,12 @@ def start_watch(
                 if arrays is not None:
                     _daemon.anomaly_engine.set_baseline_arrays(arrays.freqs, arrays.mean)
                     logger.info(f"Watch daemon loaded spectral baseline {bl_id} ({arrays.size} bins, numpy arrays)")
+                else:
+                    logger.warning(f"Active spectral baseline {bl_id} has no array data; watch runs without baseline")
+            else:
+                logger.info("No active spectral baseline; watch runs on spike/burst detection only")
         except Exception as e:
-            logger.debug(f"Could not load spectral baseline: {e}")
+            logger.warning(f"Could not load spectral baseline for watch: {e}")
 
         if _daemon.start():
             return {"status": "started", **_daemon.get_status()}

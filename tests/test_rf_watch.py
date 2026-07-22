@@ -8,7 +8,7 @@ os.environ.setdefault("INTERCEPT_SKIP_DEFERRED_INIT", "1")
 
 numpy = pytest.importorskip("numpy")
 
-from utils.tscm.rf_watch import AnomalyEngine, SpectrumFrame, WaterfallBuffer
+from utils.tscm.rf_watch import AnomalyEngine, RFWatchDaemon, SpectrumFrame, WaterfallBuffer
 
 
 def _frame(freqs, power_db, noise_floor=-90.0, band="TEST", timestamp=1000.0):
@@ -173,6 +173,23 @@ class TestStateCap:
         eng._short_term = {f"{i}.0000": None for i in range(100_001)}
         eng.process_frame(_spectrum([(105.0, -40.0)]))
         assert len(eng._short_term) < 100_001
+
+
+class TestDaemonStatus:
+    def test_baseline_absent(self):
+        d = RFWatchDaemon("driver=null", [(88_000_000, 108_000_000, "FM")])
+        st = d.get_status()
+        assert st["baseline"]["loaded"] is False
+        assert st["baseline"]["bins"] == 0
+
+    def test_baseline_reported_when_loaded(self):
+        d = RFWatchDaemon("driver=null", [(88_000_000, 108_000_000, "FM")])
+        d.anomaly_engine.set_baseline_arrays(
+            numpy.array([100.0, 200.0, 300.0]), numpy.array([-50.0, -60.0, -70.0])
+        )
+        st = d.get_status()
+        assert st["baseline"]["loaded"] is True
+        assert st["baseline"]["bins"] == 3
 
 
 class TestWaterfallBuffer:
