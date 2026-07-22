@@ -1,4 +1,85 @@
-# Python
+# =============================================================================
+# SECRETS & CREDENTIALS — never commit these
+# =============================================================================
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+*.crt
+*.cer
+*.csr
+*.p12
+*.pfx
+*.jks
+secret.key
+.initial_password
+*_rsa
+*_rsa.pub
+*_ed25519
+*_ed25519.pub
+id_dsa*
+*.gpg
+*.asc
+credentials*.json
+!credentials*.example.json
+token*.json
+.netrc
+.pgpass
+
+# Agent configs with real credentials (keep template only)
+intercept_agent_*.cfg
+!intercept_agent.cfg
+
+# =============================================================================
+# DATABASES & USER DATA — contains scan history, baselines, admin credentials
+# =============================================================================
+instance/
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+*.sqlite-journal
+intercept.db
+
+# Spectral baseline arrays (per-site RF fingerprints)
+*.npz
+
+# =============================================================================
+# CAPTURE DATA — RF recordings, scan output (large + site-identifying)
+# =============================================================================
+data/weather_sat/
+data/radiosonde/
+data/subghz/captures/
+*.kismet
+*.kismet.json
+*.pcap
+*.pcapng
+*.cap
+*.iq
+*.cs8
+*.cs16
+*.cf32
+*.sigmf-data
+*.sigmf-meta
+aircraft_db.json
+aircraft_db_meta.json
+
+# =============================================================================
+# LOGS & RUNTIME
+# =============================================================================
+*.log
+*.log.*
+logs/
+pager_messages.log
+*.pid
+*.sock
+
+# =============================================================================
+# PYTHON
+# =============================================================================
 __pycache__/
 *.py[cod]
 *$py.class
@@ -6,85 +87,76 @@ __pycache__/
 .Python
 env/
 venv/
+venv*/
 .venv/
 ENV/
+__pypackages__/
 uv.lock
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+.tox/
+.eggs/
+*.egg
+*.egg-info/
+pip-log.txt
+.ipynb_checkpoints/
 
-# Logs
-*.log
-pager_messages.log
-
-# Local data
+# =============================================================================
+# BUILD & DISTRIBUTION
+# =============================================================================
+dist/
+build/
 downloads/
 pgdata/
+SoapySDR/
+docker-compose.override.yml
 
-# IDE
+# =============================================================================
+# IDE, EDITORS & AI TOOLING
+# =============================================================================
 .idea/
 .vscode/
+.claude/
+.cursor/
+.aider*
+.continue/
+.superpowers/
+docs/superpowers/
 *.swp
 *.swo
 *~
+*.bak
+*.orig
+*.rej
 
-# OS
+# =============================================================================
+# OS ARTIFACTS
+# =============================================================================
 .DS_Store
+.Spotlight-V100
+.Trashes
 Thumbs.db
+ehthumbs.db
+desktop.ini
+$RECYCLE.BIN/
 
-# Distribution
-dist/
-build/
-*.egg-info/
-
-# Package manager lock files & DB files
-uv.lock
-*.db
-*.sqlite3
-intercept.db
-
-# Instance folder (contains database with user data)
-instance/
-
-# Agent configs with real credentials (keep template only)
-intercept_agent_*.cfg
-!intercept_agent.cfg
-
-# Temporary files
+# =============================================================================
+# TEMP & LOCAL SCRATCH
+# =============================================================================
 /tmp/
 *.tmp
-
-# Weather satellite runtime data (decoded images, samples, SatDump output)
-data/weather_sat/
-
-# Radiosonde runtime data (station config, logs)
-data/radiosonde/
-
-# SDR capture files (large IQ recordings)
-data/subghz/captures/
-
-# Kismet capture files
-*.kismet
-*.kismet.json
-
-# ADS-B aircraft database (downloaded at runtime)
-aircraft_db.json
-aircraft_db_meta.json
-
-# SoapySDR build directory (compiled during setup, contains its own .git)
-SoapySDR/
-
-# Env files
-.env
-.env.*
-!.env.example
-
-# Local utility scripts
+*.temp
 reset-sdr.*
-.superpowers/
-docs/superpowers/
 
-# Design and implementation docs (internal use only)
+# =============================================================================
+# INTERNAL DOCS & WORKTREES
+# =============================================================================
 docs/plans/
 docs/specs/
 docs/design/
-
-# Git worktrees
 .worktrees/

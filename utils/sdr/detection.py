@@ -298,7 +298,7 @@ def detect_uhd_devices() -> list[SDRDevice]:
 
         # Parse uhd_find_devices output blocks:
         #   Device Address:
-        #       serial: 3262BF6
+        #       serial: 01ABCDE
         #       name: B200mini
         #       product: B200mini
         #       type: b200

@@ -40,7 +40,7 @@ def scan_bands(
     Opens the SoapySDR device once, sweeps all bands, then closes.
 
     Args:
-        device_args: SoapySDR device string (e.g. "driver=uhd,serial=3262BF6")
+        device_args: SoapySDR device string (e.g. "driver=uhd,serial=01ABCDE")
         bands: List of (start_hz, end_hz, bin_size_hz, band_name) tuples
         gain: Receiver gain in dB
         stop_check: Optional callable returning True to abort early
