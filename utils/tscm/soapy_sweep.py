@@ -53,7 +53,8 @@ def scan_bands(
         return []
 
     if stop_check is None:
-        stop_check = lambda: False
+        def stop_check() -> bool:
+            return False
 
     all_signals: list[dict] = []
 

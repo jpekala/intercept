@@ -2,16 +2,24 @@ name: CI
 
 on: [push, pull_request]
 
+# Cancel superseded runs on the same ref
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   lint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: '3.11'
+          cache: pip
+          cache-dependency-path: requirements-dev.txt
       - run: pip install -r requirements-dev.txt
-      - run: ruff check .
+      - name: Ruff lint
+        run: ruff check --output-format=github .
 
   test:
     runs-on: ubuntu-latest
@@ -20,16 +28,20 @@ jobs:
       matrix:
         group: ["a-l", "m-z"]
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: '3.11'
+          cache: pip
+          cache-dependency-path: requirements-dev.txt
       - run: pip install -r requirements-dev.txt
       - name: Run tests (${{ matrix.group }})
+        # Non-blocking for now: the suite has known gaps in the hardware-mock
+        # layer. Flip to gating once a full run is confirmed green on CI.
+        continue-on-error: true
         run: |
           if [ "${{ matrix.group }}" = "a-l" ]; then
             pytest tests/test_[a-l]*.py --tb=short -q
           else
             pytest tests/test_[m-z]*.py --tb=short -q
           fi
-        continue-on-error: true

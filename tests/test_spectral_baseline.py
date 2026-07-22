@@ -2,10 +2,7 @@
 
 import os
 import sys
-import shutil
-import tempfile
-from pathlib import Path
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -25,75 +22,6 @@ from utils.tscm.spectral_baseline import (
     _severity_from_delta,
     build_snapshot_from_rf_signals,
 )
-
-
-@pytest.fixture
-def tmp_spectral_dir(tmp_path):
-    """Override _SPECTRAL_DIR to a temp directory."""
-    with patch("utils.tscm.spectral_baseline._SPECTRAL_DIR", tmp_path):
-        yield tmp_path
-
-
-@pytest.fixture
-def mock_db():
-    """Mock the database so no real SQLite is needed."""
-    import sqlite3
-    conn = sqlite3.connect(":memory:")
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA foreign_keys = ON")
-
-    conn.execute("""
-        CREATE TABLE tscm_spectral_baselines (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT NOT NULL,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            snapshot_count INTEGER DEFAULT 0,
-            bin_count INTEGER DEFAULT 0,
-            bands TEXT,
-            is_active BOOLEAN DEFAULT 0,
-            description TEXT
-        )
-    """)
-    conn.execute("""
-        CREATE TABLE tscm_spectral_snapshots (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            baseline_id INTEGER NOT NULL,
-            sweep_id INTEGER,
-            captured_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            bin_count INTEGER DEFAULT 0,
-            noise_floors TEXT
-        )
-    """)
-
-    class FakeCtx:
-        def __enter__(self):
-            return conn
-        def __exit__(self, *args):
-            conn.commit()
-
-    with patch("utils.tscm.spectral_baseline.get_db", return_value=FakeCtx()) as mock:
-        # Also need to patch the import inside methods
-        with patch.dict("sys.modules", {}):
-            with patch("utils.tscm.spectral_baseline.SpectralStore._ensure_tables"):
-                yield conn, FakeCtx
-
-
-@pytest.fixture
-def store(tmp_spectral_dir, mock_db):
-    """Create a SpectralStore backed by temp dir and in-memory SQLite."""
-    conn, FakeCtx = mock_db
-    with patch("utils.tscm.spectral_baseline.SpectralStore._ensure_tables"):
-        s = SpectralStore.__new__(SpectralStore)
-        s._ensure_tables = lambda: None
-        # Patch get_db in the module
-        import utils.tscm.spectral_baseline as mod
-        original_get_db = None
-        def fake_get_db():
-            return FakeCtx()
-        with patch.object(mod, "get_db", fake_get_db, create=True):
-            pass
-        s._get_db = fake_get_db
-    return s, conn, FakeCtx
 
 
 def _make_store(tmp_path):

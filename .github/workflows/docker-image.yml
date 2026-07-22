@@ -12,6 +12,11 @@ permissions:
   contents: read
   packages: write
 
+# Cancel superseded builds on the same ref
+concurrency:
+  group: docker-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -19,7 +24,7 @@ jobs:
     steps:
       # Step 1: Check out the repository code
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       # Step 2: Set up QEMU for multi-arch builds
       - name: Set up QEMU
